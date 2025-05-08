@@ -1,5 +1,6 @@
 mod server;
 mod http;
+mod http_handler;
 
 use server::HttpServer;
 fn main() {

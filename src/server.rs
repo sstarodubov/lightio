@@ -21,23 +21,23 @@ pub struct HttpServerConfig {
 
 impl HttpServerConfig {
     pub fn new() -> Self {
-       Self {
-           port: 8080,
-           handlers: Vec::new(),
-           max_req: -1
-       }
+        Self {
+            port: 8080,
+            handlers: Vec::new(),
+            max_req: -1,
+        }
     }
-    
+
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self
     }
-    
+
     pub fn handlers(mut self, handlers: Vec<BoxedHttpHandler>) -> Self {
         self.handlers = handlers;
         self
     }
-    
+
     pub fn max_req(mut self, max_req: i64) -> Self {
         self.max_req = max_req;
         self
@@ -45,13 +45,17 @@ impl HttpServerConfig {
 }
 
 impl HttpServer {
-
     pub fn start(config: HttpServerConfig) {
-        let HttpServerConfig { handlers, port, max_req} = config;
+        let HttpServerConfig {
+            handlers,
+            port,
+            max_req,
+        } = config;
         let handlers = Arc::new(Self::create_handler_map(handlers));
         let mut handled_requests = 0;
         let listener =
             TcpListener::bind(format!("127.0.0.1:{}", port)).expect("Failed to bind port");
+        println!("Listening on {}", port);
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
@@ -132,7 +136,7 @@ impl HttpServer {
 
             let method_hm = handlers.get(&request.method);
             if method_hm.is_none() {
-                println!( "method not found warning. method: {:?}", request.method);
+                println!("method not found warning. method: {:?}", request.method);
                 Self::write(&mut stream, http::NOT_FOUND);
                 continue;
             }
@@ -181,8 +185,41 @@ impl HttpServer {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use super::*;
 
+    pub struct TestHandler;
+    unsafe impl Sync for TestHandler {}
+    unsafe impl Send for TestHandler {}
+    impl HttpHandler for TestHandler {
+        fn handle_request(&self, request: &mut HttpReq) -> u16 {
+            let mut buff = [0; 64];
+            let reader = &mut request.body;
+            let result = reader.read(&mut buff).expect("Failed to read line");
+            println!("{}", String::from_utf8_lossy(&buff[0..result]));
+            200
+        }
+
+        fn path(&self) -> String {
+            String::from("/hello")
+        }
+
+        fn method(&self) -> HttpMethod {
+            HttpMethod::GET
+        }
+    }
+
+    fn setup_server() {
+    }
+    
     #[test]
-    fn test1() {}
+    fn send_fine_request() {
+        HttpServer::start_on_thread(
+            HttpServerConfig::new()
+                .port(8081)
+                .max_req(1)
+                .handlers(vec![Box::new(TestHandler)]),
+        );
+        thread::sleep(Duration::from_millis(500));
+    }
 }

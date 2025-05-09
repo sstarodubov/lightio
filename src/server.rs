@@ -6,11 +6,11 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::Shutdown::Both;
 use std::net::{TcpListener, TcpStream};
 
-const BUFFER_SIZE: usize = 6;
 
 pub struct HttpServer {
     port: u16,
     handlers: Vec<Box<dyn HttpHandler>>,
+    max_handled_requests: i64
 }
 
 impl HttpServer {
@@ -18,10 +18,20 @@ impl HttpServer {
         Self {
             port,
             handlers: vec![],
+            max_handled_requests: -1,
+        }
+    }
+
+    fn new_single_request_server(port: u16) -> Self {
+        Self {
+            port,
+            handlers: vec![],
+            max_handled_requests: 1,
         }
     }
 
     pub fn start(&self) {
+        let mut handled_requests = 0;
         let listener =
             TcpListener::bind(format!("127.0.0.1:{}", self.port)).expect("Failed to bind port");
         for stream in listener.incoming() {
@@ -29,11 +39,16 @@ impl HttpServer {
                 Ok(stream) => Self::dispatch(stream),
                 Err(e) => eprintln!("Http request e: {}", e),
             }
+            handled_requests += 1;
+            if self.max_handled_requests != -1 && handled_requests >= self.max_handled_requests {
+                println!("stop server");
+                return;
+            }
         }
     }
-    
+
     pub fn add_handler(handler: impl HttpHandler) {
-       todo!() 
+        todo!()
     }
 
     fn dispatch(mut stream: TcpStream) {
@@ -109,11 +124,20 @@ impl HttpServer {
 
 // test function
 fn handle_req(request: &mut HttpReq) -> u16 {
-    let mut buff = [0; BUFFER_SIZE];
+    let mut buff = [0; 6];
     let reader = &mut request.body;
     let result = reader.read(&mut buff).expect("Failed to read line");
     println!("{}", String::from_utf8_lossy(&buff[0..result]));
     let result = reader.read(&mut buff).expect("Failed to read line");
     println!("{}", String::from_utf8_lossy(&buff[0..result]));
     200
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test1() {
+    }
 }

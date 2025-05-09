@@ -1,5 +1,5 @@
-use std::io::Read;
 use crate::http::{HttpMethod, HttpReq};
+use std::io::Read;
 
 pub trait HttpHandler {
     fn handle_request(&self, req: &mut HttpReq) -> u16;
@@ -9,6 +9,9 @@ pub trait HttpHandler {
 
 //for tests
 pub struct HelloHandler;
+
+unsafe impl Sync for HelloHandler {}
+unsafe impl Send for HelloHandler {}
 
 impl HttpHandler for HelloHandler {
     fn handle_request(&self, request: &mut HttpReq) -> u16 {

@@ -1,14 +1,16 @@
-mod server;
 mod http;
 mod http_handler;
+mod server;
 
-use server::HttpServer;
 use crate::http_handler::HelloHandler;
+use crate::server::HttpServerConfig;
+use server::HttpServer;
 
 fn main() {
+    let config = HttpServerConfig::new()
+        .port(8080)
+        .handlers(vec![Box::new(HelloHandler)]);
     
-    let mut server = HttpServer::new(8080);
-    server.add_handler(HelloHandler);
-    server.start();
-    println!("Main");
+    HttpServer::start(config);
+    println!("main stops")
 }

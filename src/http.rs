@@ -7,9 +7,11 @@ pub const TEMPLATE_CLIENT_ERROR: &str = "HTTP/1.1 {} BAD REQUEST\r\nContent-Leng
 pub const TEMPLATE_OK: &str = "HTTP/1.1 {} OK\r\nContent-Length: 0\r\n\r\n";
 pub const TEMPLATE_SERVER_ERROR: &str = "HTTP/1.1 {} INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
 pub const BAD_REQUEST: &[u8] = "HTTP/1.1 400 BAD REQUEST\r\nContent-Length: 0\r\n\r\n".as_bytes();
-pub const SERVER_ERROR: &[u8] = "HTTP/1.1 500 INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n".as_bytes();
+pub const NOT_FOUND: &[u8] = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\n\r\n".as_bytes();
+pub const SERVER_ERROR: &[u8] =
+    "HTTP/1.1 500 INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n".as_bytes();
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum HttpMethod {
     POST,
     GET,
@@ -31,6 +33,7 @@ pub struct HttpReq<'a> {
     pub path: String,
     pub headers: HashMap<String, String>,
     pub body: BufReader<&'a TcpStream>,
+    pub query_params: HashMap<String, String>,
 }
 
 pub fn parse_start_line(line: &str) -> Option<(HttpMethod, String)> {
@@ -64,4 +67,4 @@ pub fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Option<HashMap<Strin
             }
         };
     }
-} 
+}

@@ -1,23 +1,24 @@
 use crate::http;
-use crate::http::HttpReq;
+use crate::http::{HttpMethod, HttpReq};
 use crate::http_handler::HttpHandler;
+use std::any::Any;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::Shutdown::Both;
 use std::net::{TcpListener, TcpStream};
 
-
 pub struct HttpServer {
     port: u16,
-    handlers: Vec<Box<dyn HttpHandler>>,
-    max_handled_requests: i64
+    handlers: HashMap<HttpMethod, HashMap<String, Box<dyn HttpHandler>>>,
+    max_handled_requests: i64,
 }
 
 impl HttpServer {
     pub fn new(port: u16) -> Self {
         Self {
             port,
-            handlers: vec![],
+            handlers: HashMap::new(),
             max_handled_requests: -1,
         }
     }
@@ -25,7 +26,7 @@ impl HttpServer {
     fn new_single_request_server(port: u16) -> Self {
         Self {
             port,
-            handlers: vec![],
+            handlers: HashMap::new(),
             max_handled_requests: 1,
         }
     }
@@ -36,7 +37,7 @@ impl HttpServer {
             TcpListener::bind(format!("127.0.0.1:{}", self.port)).expect("Failed to bind port");
         for stream in listener.incoming() {
             match stream {
-                Ok(stream) => Self::dispatch(stream),
+                Ok(stream) => self.dispatch(stream),
                 Err(e) => eprintln!("Http request e: {}", e),
             }
             handled_requests += 1;
@@ -47,11 +48,19 @@ impl HttpServer {
         }
     }
 
-    pub fn add_handler(handler: impl HttpHandler) {
-        todo!()
+    pub fn add_handler(&mut self, handler: impl HttpHandler + 'static) {
+        if !self.handlers.contains_key(&handler.method()) {
+            self.handlers.insert(handler.method(), HashMap::new());
+        }
+
+        let path_hm = self
+            .handlers
+            .get_mut(&handler.method())
+            .expect("No handler");
+        path_hm.insert(handler.path(), Box::new(handler));
     }
 
-    fn dispatch(mut stream: TcpStream) {
+    fn dispatch(&self, mut stream: TcpStream) {
         loop {
             let mut reader = BufReader::new(&stream);
             let mut start_line = String::new();
@@ -90,9 +99,21 @@ impl HttpServer {
                 method,
                 headers: headers.unwrap(),
                 body: reader,
+                query_params: HashMap::new(), //todo()
             };
 
-            let (template, code) = match handle_req(&mut request) {
+            let http_handler = self.get_handler(&request);
+            if http_handler.is_none() {
+                println!(
+                    "handler get warning. path: {}, method: {:?}",
+                    request.path, request.method
+                );
+                Self::write(&mut stream, http::NOT_FOUND);
+                continue;
+            }
+
+            let handler = http_handler.unwrap();
+            let (template, code) = match handler.handle_request(&mut request) {
                 code @ 200..300 => (http::TEMPLATE_OK, code),
                 code @ 400..499 => (http::TEMPLATE_CLIENT_ERROR, code),
                 code => (http::TEMPLATE_SERVER_ERROR, code),
@@ -102,6 +123,11 @@ impl HttpServer {
             let response = binding.as_bytes();
             Self::write(&mut stream, response);
         }
+    }
+
+    fn get_handler(&self, request: &HttpReq) -> Option<&Box<dyn HttpHandler>> {
+        let method_hm = self.handlers.get(&request.method)?;
+        method_hm.get(&request.path)
     }
 
     fn write(tcp_stream: &mut TcpStream, msg: &[u8]) {
@@ -122,22 +148,10 @@ impl HttpServer {
     }
 }
 
-// test function
-fn handle_req(request: &mut HttpReq) -> u16 {
-    let mut buff = [0; 6];
-    let reader = &mut request.body;
-    let result = reader.read(&mut buff).expect("Failed to read line");
-    println!("{}", String::from_utf8_lossy(&buff[0..result]));
-    let result = reader.read(&mut buff).expect("Failed to read line");
-    println!("{}", String::from_utf8_lossy(&buff[0..result]));
-    200
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
-    fn test1() {
-    }
+    fn test1() {}
 }

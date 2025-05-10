@@ -1,4 +1,5 @@
 use crate::http;
+use crate::thread_pool;
 use crate::http::{HttpMethod, HttpReq};
 use crate::http_handler::HttpHandler;
 use std::collections::HashMap;
@@ -17,6 +18,7 @@ pub struct HttpServerConfig {
     port: u16,
     handlers: Vec<BoxedHttpHandler>,
     max_req: i64,
+    pool_size: usize,
 }
 
 impl HttpServerConfig {
@@ -25,9 +27,15 @@ impl HttpServerConfig {
             port: 8080,
             handlers: Vec::new(),
             max_req: -1,
+            pool_size: 4,
         }
     }
-
+    
+    pub fn pool_size(mut self, size: usize) -> Self {
+        self.pool_size = size;
+        self
+    }
+    
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self
@@ -50,7 +58,10 @@ impl HttpServer {
             handlers,
             port,
             max_req,
+            pool_size
         } = config;
+
+        let pool = thread_pool::ThreadPool::new(pool_size).expect("thread pool create error"); 
         let handlers = Arc::new(Self::create_handler_map(handlers));
         let mut handled_requests = 0;
         let listener =
@@ -60,7 +71,7 @@ impl HttpServer {
             match stream {
                 Ok(stream) => {
                     let handler_map = Arc::clone(&handlers);
-                    thread::spawn(move || Self::dispatch(stream, handler_map));
+                    pool.execute(move || Self::dispatch(stream, handler_map));
                 }
                 Err(e) => eprintln!("Http request e: {}", e),
             }

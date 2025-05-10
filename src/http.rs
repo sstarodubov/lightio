@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 
-pub const HTTP_SPACE: &str = "\r\n";
 pub const TEMPLATE_CLIENT_ERROR: &str = "HTTP/1.1 {} BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
 pub const TEMPLATE_OK: &str = "HTTP/1.1 {} OK\r\nContent-Length: 0\r\n\r\n";
 pub const TEMPLATE_SERVER_ERROR: &str = "HTTP/1.1 {} INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
@@ -66,5 +65,58 @@ pub fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Option<HashMap<Strin
                 eprintln!("not valid header: {}", line);
             }
         };
+    }
+}
+
+pub fn parse_query_params(path: String) -> (String, HashMap<String, String>) {
+    if let Some((path, params)) = path.split_once("?") {
+        let mut params_map = HashMap::<String, String>::new();
+        for key_val in params.split("&") {
+            if let Some((key, val)) = key_val.split_once("=") {
+                params_map.insert(key.to_string(), val.to_string());
+            }
+        }
+        (path.to_string(), params_map)
+    } else {
+        (path.to_string(), HashMap::new())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_query_params_test() {
+        let (path, params) = parse_query_params("/hello?hello=world&test=1".to_string());
+        
+        assert_eq!("/hello", path);
+        assert_eq!(2, params.len());
+        assert_eq!("world", params["hello"]);
+        assert_eq!("1", params["test"]);
+    }
+
+
+    #[test]
+    fn parse_query_params_test_4() {
+        let (path, params) = parse_query_params("/hello?hello=world?&test=1".to_string());
+
+        assert_eq!("/hello", path);
+    }
+    
+    #[test]
+    fn parse_query_params_test_3() {
+        let (path, params) = parse_query_params("/hello?".to_string());
+
+        assert_eq!("/hello", path);
+        assert_eq!(0, params.len());
+    }
+
+    #[test]
+    fn parse_query_params_test_2() {
+        let (path, params) = parse_query_params("/hello".to_string());
+
+        assert_eq!("/hello", path);
+        assert_eq!(0, params.len());
     }
 }

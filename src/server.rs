@@ -2,7 +2,7 @@ use crate::http;
 use crate::http::{HttpMethod, HttpReq};
 use crate::http_handler::HttpHandler;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::Shutdown::Both;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -125,13 +125,13 @@ impl HttpServer {
                 Self::write_and_close(&mut stream, http::BAD_REQUEST);
                 break;
             }
-
+            let (path, query_params) = http::parse_query_params(path);
             let mut request = HttpReq {
                 path,
                 method,
                 headers: headers.unwrap(),
                 body: reader,
-                query_params: HashMap::new(), //todo()
+                query_params
             };
 
             let method_hm = handlers.get(&request.method);
@@ -185,19 +185,51 @@ impl HttpServer {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use super::*;
+    use reqwest::Method;
+    use reqwest::blocking::Client;
+    use reqwest::blocking::Response;
+    use std::cmp::PartialEq;
+    use std::time::Duration;
 
-    pub struct TestHandler;
+    struct TestHandler;
     unsafe impl Sync for TestHandler {}
     unsafe impl Send for TestHandler {}
+
+    impl PartialEq<HttpMethod> for &HttpMethod {
+        fn eq(&self, other: &HttpMethod) -> bool {
+            todo!()
+        }
+    }
+
     impl HttpHandler for TestHandler {
         fn handle_request(&self, request: &mut HttpReq) -> u16 {
-            let mut buff = [0; 64];
-            let reader = &mut request.body;
-            let result = reader.read(&mut buff).expect("Failed to read line");
-            println!("{}", String::from_utf8_lossy(&buff[0..result]));
-            200
+            if request.headers.contains_key("content-length") {
+                let mut start_line = String::new();
+                request.body.read_line(&mut start_line).expect("read body");
+                if start_line == "helloworld\r\n" {
+                    201
+                } else {
+                    400
+                }
+            } else if request.headers.contains_key("x-query") {
+                let query_params = &request.query_params;
+                let hello = query_params.get("hello");
+                let test = query_params.get("test");
+                if hello.is_none() || test.is_none() {
+                    400
+                } else {
+                    let world = hello.unwrap();
+                    let one = test.unwrap();
+                    if world == "world" && one == "1" {
+                        205
+                    } else {
+                        400
+                    }
+                }
+            } else {
+                200
+            }
         }
 
         fn path(&self) -> String {
@@ -209,17 +241,69 @@ mod tests {
         }
     }
 
-    fn setup_server() {
-    }
-    
-    #[test]
-    fn send_fine_request() {
+    fn start_server(port: u16, handler: impl HttpHandler + Sync + Send + 'static) {
         HttpServer::start_on_thread(
             HttpServerConfig::new()
-                .port(8081)
+                .port(port)
                 .max_req(1)
-                .handlers(vec![Box::new(TestHandler)]),
+                .handlers(vec![Box::new(handler)]),
         );
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(200));
+    }
+
+    fn send_req(port: u16, method: Method, path: &str) -> Response {
+        let client = Client::new();
+        let url = format!("http://localhost:{}/{}", port, path);
+        let request = match method {
+            Method::GET => client.get(&url),
+            Method::POST => client.post(&url),
+            _ => panic!("unknown method"),
+        };
+        request.send().unwrap()
+    }
+
+    #[test]
+    fn send_fine_request() {
+        start_server(8080, TestHandler);
+        assert_eq!(200, send_req(8080, Method::GET, "hello").status().as_u16());
+    }
+
+    #[test]
+    fn send_unknown_method() {
+        start_server(8081, TestHandler);
+        assert_eq!(404, send_req(8081, Method::POST, "hello").status().as_u16());
+    }
+
+    #[test]
+    fn send_unknown_path() {
+        start_server(8082, TestHandler);
+        assert_eq!(404, send_req(8082, Method::GET, "hoho").status().as_u16());
+    }
+
+    #[test]
+    fn send_body() {
+        start_server(8083, TestHandler);
+
+        let client = Client::new();
+        let req = client
+            .get("http://localhost:8083/hello")
+            .header("content-length", "?")
+            .body("helloworld\r\n");
+        let response = req.send().unwrap();
+
+        assert_eq!(201, response.status().as_u16());
+    }
+
+    #[test]
+    fn send_query_params() {
+        start_server(8084, TestHandler);
+
+        let client = Client::new();
+        let req = client
+            .get("http://localhost:8084/hello?hello=world&test=1")
+            .header("X-QUERY", "?");
+        let response = req.send().unwrap();
+
+        assert_eq!(205, response.status().as_u16());
     }
 }

@@ -2,7 +2,6 @@ mod http;
 mod http_handler;
 mod server;
 
-use std::io::Write;
 use std::thread;
 use std::time::Duration;
 use reqwest::blocking::Client;

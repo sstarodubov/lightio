@@ -1,7 +1,7 @@
 use crate::http;
 use crate::thread_pool;
 use crate::http::{HttpMethod, HttpReq};
-use crate::http_handler::HttpHandler;
+use crate::http_handler::HttpNoBodyHandler;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::Shutdown::Both;
@@ -9,14 +9,14 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::thread;
 
-type BoxedHttpHandler = Box<dyn HttpHandler + Send + Sync>;
-type HttpHandlerMap = HashMap<HttpMethod, HashMap<String, BoxedHttpHandler>>;
+type NoBodyHttpHandler = Box<dyn HttpNoBodyHandler + Send + Sync>;
+type NoBodyHttpHandlerMap = HashMap<HttpMethod, HashMap<String, NoBodyHttpHandler>>;
 
 pub struct HttpServer;
 
 pub struct HttpServerConfig {
     port: u16,
-    handlers: Vec<BoxedHttpHandler>,
+    handlers: Vec<NoBodyHttpHandler>,
     max_req: i64,
     pool_size: usize,
 }
@@ -41,7 +41,7 @@ impl HttpServerConfig {
         self
     }
 
-    pub fn handlers(mut self, handlers: Vec<BoxedHttpHandler>) -> Self {
+    pub fn handlers(mut self, handlers: Vec<NoBodyHttpHandler>) -> Self {
         self.handlers = handlers;
         self
     }
@@ -89,8 +89,8 @@ impl HttpServer {
         })
     }
 
-    fn create_handler_map(handlers: Vec<BoxedHttpHandler>) -> HttpHandlerMap {
-        let mut map: HttpHandlerMap = HashMap::new();
+    fn create_handler_map(handlers: Vec<NoBodyHttpHandler>) -> NoBodyHttpHandlerMap {
+        let mut map: NoBodyHttpHandlerMap = HashMap::new();
         for handler in handlers {
             if !map.contains_key(&handler.method()) {
                 map.insert(handler.method(), HashMap::new());
@@ -103,7 +103,7 @@ impl HttpServer {
         map
     }
 
-    fn dispatch(mut stream: TcpStream, handlers: Arc<HttpHandlerMap>) {
+    fn dispatch(mut stream: TcpStream, handlers: Arc<NoBodyHttpHandlerMap>) {
         loop {
             let mut reader = BufReader::new(&stream);
             let mut start_line = String::new();
@@ -162,7 +162,7 @@ impl HttpServer {
                 Self::write(&mut stream, http::NOT_FOUND.as_bytes());
                 continue;
             }
-
+            
             let handler = http_handler.expect("handler is not found");
             let (template, code) = match handler.handle_request(&mut request) {
                 code @ 200..300 => (http::TEMPLATE_OK, code),
@@ -211,7 +211,7 @@ mod tests {
     unsafe impl Sync for TestHandler {}
     unsafe impl Send for TestHandler {}
 
-    impl HttpHandler for TestHandler {
+    impl HttpNoBodyHandler for TestHandler {
         fn handle_request(&self, request: &mut HttpReq) -> u16 {
             if request.headers.contains_key("content-length") {
                 let mut start_line = String::new();
@@ -250,7 +250,7 @@ mod tests {
         }
     }
 
-    fn start_server(port: u16, handler: impl HttpHandler + Sync + Send + 'static) {
+    fn start_server(port: u16, handler: impl HttpNoBodyHandler + Sync + Send + 'static) {
         HttpServer::start_on_thread(
             HttpServerConfig::new()
                 .port(port)

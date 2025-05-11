@@ -2,7 +2,7 @@ use crate::file_storage::{FileStorage};
 use crate::http::{HttpMethod, HttpReq};
 use std::path::Path;
 
-pub trait HttpHandler {
+pub trait HttpNoBodyHandler {
     fn handle_request(&self, req: &mut HttpReq) -> u16;
     fn path(&self) -> &str;
     fn method(&self) -> HttpMethod;
@@ -19,7 +19,7 @@ impl BucketCreateHandler {
         BucketCreateHandler { file_storage }
     }
 }
-impl HttpHandler for BucketCreateHandler {
+impl HttpNoBodyHandler for BucketCreateHandler {
     fn handle_request(&self, req: &mut HttpReq) -> u16 {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {
@@ -51,7 +51,7 @@ impl BucketDeleteHandler {
         BucketDeleteHandler { file_storage }
     }
 }
-impl HttpHandler for BucketDeleteHandler {
+impl HttpNoBodyHandler for BucketDeleteHandler {
     fn handle_request(&self, req: &mut HttpReq) -> u16 {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {
@@ -83,7 +83,7 @@ impl BucketExistsHandler {
         BucketExistsHandler { file_storage }
     }
 }
-impl HttpHandler for BucketExistsHandler {
+impl HttpNoBodyHandler for BucketExistsHandler {
     fn handle_request(&self, req: &mut HttpReq) -> u16 {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {

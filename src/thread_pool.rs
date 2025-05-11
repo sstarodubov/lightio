@@ -3,23 +3,20 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 struct Worker {
-    id: usize,
     thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
-    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+    fn new(receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || {
             loop {
                 let message = receiver.lock().unwrap().recv();
 
                 match message {
                     Ok(job) => {
-                        println!("Worker {} выполняет задачу", id);
                         job();
                     }
                     Err(_) => {
-                        println!("Worker {} отключён", id);
                         break;
                     }
                 }
@@ -27,7 +24,6 @@ impl Worker {
         });
 
         Worker {
-            id,
             thread: Some(thread),
         }
     }
@@ -48,7 +44,7 @@ impl ThreadPool {
         let mut workers = Vec::with_capacity(size);
 
         for id in 0..size {
-            workers.push(Worker::new(id, Arc::clone(&receiver)));
+            workers.push(Worker::new(Arc::clone(&receiver)));
         }
 
         Ok(ThreadPool { workers, sender })

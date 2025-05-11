@@ -207,12 +207,6 @@ mod tests {
     unsafe impl Sync for TestHandler {}
     unsafe impl Send for TestHandler {}
 
-    impl PartialEq<HttpMethod> for &HttpMethod {
-        fn eq(&self, other: &HttpMethod) -> bool {
-            todo!()
-        }
-    }
-
     impl HttpHandler for TestHandler {
         fn handle_request(&self, request: &mut HttpReq) -> u16 {
             if request.headers.contains_key("content-length") {

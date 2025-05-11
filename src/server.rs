@@ -1,22 +1,25 @@
+use std::cell::RefCell;
 use crate::http;
 use crate::thread_pool;
 use crate::http::{HttpMethod, HttpReq};
-use crate::http_handler::HttpNoBodyHandler;
+use crate::http_handler::HttpHandler;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::Shutdown::Both;
 use std::net::{TcpListener, TcpStream};
+use std::ops::DerefMut;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
 
-type NoBodyHttpHandler = Box<dyn HttpNoBodyHandler + Send + Sync>;
-type NoBodyHttpHandlerMap = HashMap<HttpMethod, HashMap<String, NoBodyHttpHandler>>;
+type BoxHttpHandler = Box<dyn HttpHandler + Send + Sync>;
+type BoxHttpHandlerMap = HashMap<HttpMethod, HashMap<String, BoxHttpHandler>>;
 
 pub struct HttpServer;
 
 pub struct HttpServerConfig {
     port: u16,
-    handlers: Vec<NoBodyHttpHandler>,
+    handlers: Vec<BoxHttpHandler>,
     max_req: i64,
     pool_size: usize,
 }
@@ -41,7 +44,7 @@ impl HttpServerConfig {
         self
     }
 
-    pub fn handlers(mut self, handlers: Vec<NoBodyHttpHandler>) -> Self {
+    pub fn handlers(mut self, handlers: Vec<BoxHttpHandler>) -> Self {
         self.handlers = handlers;
         self
     }
@@ -89,8 +92,8 @@ impl HttpServer {
         })
     }
 
-    fn create_handler_map(handlers: Vec<NoBodyHttpHandler>) -> NoBodyHttpHandlerMap {
-        let mut map: NoBodyHttpHandlerMap = HashMap::new();
+    fn create_handler_map(handlers: Vec<BoxHttpHandler>) -> BoxHttpHandlerMap {
+        let mut map: BoxHttpHandlerMap = HashMap::new();
         for handler in handlers {
             if !map.contains_key(&handler.method()) {
                 map.insert(handler.method(), HashMap::new());
@@ -103,9 +106,11 @@ impl HttpServer {
         map
     }
 
-    fn dispatch(mut stream: TcpStream, handlers: Arc<NoBodyHttpHandlerMap>) {
+    fn dispatch(mut stream: TcpStream, handlers: Arc<BoxHttpHandlerMap>) {
         loop {
-            let mut reader = BufReader::new(&stream);
+            let rc_stream = Rc::new(RefCell::new(&stream));
+            let rc_stream = Rc::clone(&rc_stream);
+            let mut reader = BufReader::new(*rc_stream.borrow());
             let mut start_line = String::new();
             if let Err(e) = reader.read_line(&mut start_line) {
                 eprintln!("start line read error: {}", e);
@@ -164,19 +169,7 @@ impl HttpServer {
             }
             
             let handler = http_handler.expect("handler is not found");
-            let (template, code) = match handler.handle_request(&mut request) {
-                code @ 200..300 => (http::TEMPLATE_OK, code),
-                code @ 400..499 => (http::TEMPLATE_CLIENT_ERROR, code),
-                code => (http::TEMPLATE_SERVER_ERROR, code),
-            };
-            
-            
-            let binding:String = match code {
-                404 => http::NOT_FOUND.to_string(),   
-                c => template.replace("{}", &c.to_string())
-            };
-            let response = binding.as_bytes();
-            Self::write(&mut stream, response);
+            handler.handle_request(&mut request, rc_stream);
         }
     }
 
@@ -211,33 +204,33 @@ mod tests {
     unsafe impl Sync for TestHandler {}
     unsafe impl Send for TestHandler {}
 
-    impl HttpNoBodyHandler for TestHandler {
-        fn handle_request(&self, request: &mut HttpReq) -> u16 {
-            if request.headers.contains_key("content-length") {
+    impl HttpHandler for TestHandler {
+        fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>) {
+            if req.headers.contains_key("content-length") {
                 let mut start_line = String::new();
-                request.body.read_line(&mut start_line).expect("read body");
+                req.body.read_line(&mut start_line).expect("read body");
                 if start_line == "helloworld\r\n" {
-                    201
+                    output.borrow_mut().write_all(http::TEMPLATE_OK.replace("{}", "201").as_bytes()).unwrap();
                 } else {
-                    400
+                    output.borrow_mut().write_all(http::BAD_REQUEST.as_bytes()).unwrap();
                 }
-            } else if request.headers.contains_key("x-query") {
-                let query_params = &request.query_params;
+            } else if req.headers.contains_key("x-query") {
+                let query_params = &req.query_params;
                 let hello = query_params.get("hello");
                 let test = query_params.get("test");
                 if hello.is_none() || test.is_none() {
-                    400
+                    output.borrow_mut().write_all(http::BAD_REQUEST.as_bytes()).unwrap();
                 } else {
                     let world = hello.unwrap();
                     let one = test.unwrap();
                     if world == "world" && one == "1" {
-                        205
+                        output.borrow_mut().write_all(http::TEMPLATE_OK.replace("{}", "205").as_bytes()).unwrap();
                     } else {
-                        400
+                        output.borrow_mut().write_all(http::BAD_REQUEST.as_bytes()).unwrap();
                     }
                 }
             } else {
-                200
+                output.borrow_mut().write_all(http::TEMPLATE_OK.replace("{}", "200").as_bytes()).unwrap();
             }
         }
 
@@ -250,7 +243,7 @@ mod tests {
         }
     }
 
-    fn start_server(port: u16, handler: impl HttpNoBodyHandler + Sync + Send + 'static) {
+    fn start_server(port: u16, handler: impl HttpHandler + Sync + Send + 'static) {
         HttpServer::start_on_thread(
             HttpServerConfig::new()
                 .port(port)

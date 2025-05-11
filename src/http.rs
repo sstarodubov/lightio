@@ -4,11 +4,13 @@ use std::net::TcpStream;
 
 pub const TEMPLATE_CLIENT_ERROR: &str = "HTTP/1.1 {} BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
 pub const TEMPLATE_OK: &str = "HTTP/1.1 {} OK\r\nContent-Length: 0\r\n\r\n";
+
 pub const TEMPLATE_SERVER_ERROR: &str = "HTTP/1.1 {} INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
 pub const BAD_REQUEST: &str = "HTTP/1.1 400 BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
 pub const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\n\r\n";
 pub const SERVER_ERROR: &str =
     "HTTP/1.1 500 INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
+pub const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum HttpMethod {

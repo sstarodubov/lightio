@@ -1,9 +1,14 @@
-use crate::file_storage::{FileStorage};
+use crate::file_storage::FileStorage;
+use crate::http;
 use crate::http::{HttpMethod, HttpReq};
+use std::cell::RefCell;
+use std::io::Write;
+use std::net::TcpStream;
 use std::path::Path;
+use std::rc::Rc;
 
-pub trait HttpNoBodyHandler {
-    fn handle_request(&self, req: &mut HttpReq) -> u16;
+pub trait HttpHandler {
+    fn handle_request(&self, req: &mut HttpReq, tcp_stream: Rc<RefCell<&TcpStream>>);
     fn path(&self) -> &str;
     fn method(&self) -> HttpMethod;
 }
@@ -19,19 +24,21 @@ impl BucketCreateHandler {
         BucketCreateHandler { file_storage }
     }
 }
-impl HttpNoBodyHandler for BucketCreateHandler {
-    fn handle_request(&self, req: &mut HttpReq) -> u16 {
+impl HttpHandler for BucketCreateHandler {
+    fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>) {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {
             Some(bucket_name) => {
                 if let Err(e) = self.file_storage.create_bucket(Path::new(bucket_name)) {
                     eprintln!("Failed to create bucket {}: {:?}", bucket_name, e);
-                    500
+                    output.borrow_mut().write_all(http::SERVER_ERROR.as_bytes()).unwrap() 
                 } else {
-                    200
+                    output.borrow_mut().write_all(http::OK_RESPONSE.as_bytes()).unwrap()
                 }
             }
-            None => 400,
+            None => {
+                output.borrow_mut().write_all(http::BAD_REQUEST.as_bytes()).unwrap()
+            } ,
         }
     }
     fn path(&self) -> &str {
@@ -51,19 +58,21 @@ impl BucketDeleteHandler {
         BucketDeleteHandler { file_storage }
     }
 }
-impl HttpNoBodyHandler for BucketDeleteHandler {
-    fn handle_request(&self, req: &mut HttpReq) -> u16 {
+impl HttpHandler for BucketDeleteHandler {
+    fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>) {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {
             Some(bucket_name) => {
                 if let Err(e) = self.file_storage.delete_bucket(Path::new(bucket_name)) {
                     eprintln!("Failed to delete bucket {}: {:?}", bucket_name, e);
-                    500
+                    output.borrow_mut().write_all(http::SERVER_ERROR.as_bytes()).unwrap();
                 } else {
-                    200
+                    output.borrow_mut().write_all(http::OK_RESPONSE.as_bytes()).unwrap();
                 }
             }
-            None => 200,
+            None => {
+                output.borrow_mut().write_all(http::OK_RESPONSE.as_bytes()).unwrap();
+            } 
         }
     }
     fn path(&self) -> &str {
@@ -83,18 +92,29 @@ impl BucketExistsHandler {
         BucketExistsHandler { file_storage }
     }
 }
-impl HttpNoBodyHandler for BucketExistsHandler {
-    fn handle_request(&self, req: &mut HttpReq) -> u16 {
+impl HttpHandler for BucketExistsHandler {
+    fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>) {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {
             Some(bucket_name) => {
                 if self.file_storage.bucket_exists(Path::new(bucket_name)) {
-                    200
+                    output
+                        .borrow_mut()
+                        .write_all(http::OK_RESPONSE.as_bytes())
+                        .unwrap();
                 } else {
-                    404
+                    output
+                        .borrow_mut()
+                        .write_all(http::NOT_FOUND.as_bytes())
+                        .unwrap();
                 }
             }
-            None => 400,
+            None => {
+                output
+                    .borrow_mut()
+                    .write_all(http::BAD_REQUEST.as_bytes())
+                    .unwrap();
+            }
         }
     }
     fn path(&self) -> &str {

@@ -97,7 +97,7 @@ impl HttpServer {
             }
 
             let path_hm = map.get_mut(&handler.method()).expect("No handler");
-            path_hm.insert(handler.path(), handler);
+            path_hm.insert(handler.path().to_string(), handler);
         }
 
         map
@@ -109,7 +109,7 @@ impl HttpServer {
             let mut start_line = String::new();
             if let Err(e) = reader.read_line(&mut start_line) {
                 eprintln!("start line read error: {}", e);
-                Self::write_and_close(&mut stream, http::SERVER_ERROR);
+                Self::write_and_close(&mut stream, http::SERVER_ERROR.as_bytes());
                 break;
             }
             if start_line.is_empty() {
@@ -119,7 +119,7 @@ impl HttpServer {
             let start_line = http::parse_start_line(&start_line);
             if start_line.is_none() {
                 println!("convert start line error");
-                Self::write_and_close(&mut stream, http::BAD_REQUEST);
+                Self::write_and_close(&mut stream, http::BAD_REQUEST.as_bytes());
                 break;
             }
 
@@ -133,7 +133,7 @@ impl HttpServer {
             let headers = http::parse_headers(&mut reader);
             if headers.is_none() {
                 println!("headers parsing error");
-                Self::write_and_close(&mut stream, http::BAD_REQUEST);
+                Self::write_and_close(&mut stream, http::BAD_REQUEST.as_bytes());
                 break;
             }
             let (path, query_params) = http::parse_query_params(path);
@@ -148,7 +148,7 @@ impl HttpServer {
             let method_hm = handlers.get(&request.method);
             if method_hm.is_none() {
                 println!("method not found warning. method: {:?}", request.method);
-                Self::write(&mut stream, http::NOT_FOUND);
+                Self::write(&mut stream, http::NOT_FOUND.as_bytes());
                 continue;
             }
             let method_hm = method_hm.expect("method extracting panic");
@@ -159,7 +159,7 @@ impl HttpServer {
                     "handler get warning. path: {}, method: {:?}",
                     request.path, request.method
                 );
-                Self::write(&mut stream, http::NOT_FOUND);
+                Self::write(&mut stream, http::NOT_FOUND.as_bytes());
                 continue;
             }
 
@@ -169,8 +169,12 @@ impl HttpServer {
                 code @ 400..499 => (http::TEMPLATE_CLIENT_ERROR, code),
                 code => (http::TEMPLATE_SERVER_ERROR, code),
             };
-
-            let binding = template.replace("{}", &code.to_string());
+            
+            
+            let binding:String = match code {
+                404 => http::NOT_FOUND.to_string(),   
+                c => template.replace("{}", &c.to_string())
+            };
             let response = binding.as_bytes();
             Self::write(&mut stream, response);
         }
@@ -237,8 +241,8 @@ mod tests {
             }
         }
 
-        fn path(&self) -> String {
-            String::from("/hello")
+        fn path(&self) -> &str {
+            "/hello"
         }
 
         fn method(&self) -> HttpMethod {

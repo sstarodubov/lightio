@@ -5,15 +5,16 @@ use std::net::TcpStream;
 pub const TEMPLATE_CLIENT_ERROR: &str = "HTTP/1.1 {} BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
 pub const TEMPLATE_OK: &str = "HTTP/1.1 {} OK\r\nContent-Length: 0\r\n\r\n";
 pub const TEMPLATE_SERVER_ERROR: &str = "HTTP/1.1 {} INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
-pub const BAD_REQUEST: &[u8] = "HTTP/1.1 400 BAD REQUEST\r\nContent-Length: 0\r\n\r\n".as_bytes();
-pub const NOT_FOUND: &[u8] = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\n\r\n".as_bytes();
-pub const SERVER_ERROR: &[u8] =
-    "HTTP/1.1 500 INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n".as_bytes();
+pub const BAD_REQUEST: &str = "HTTP/1.1 400 BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
+pub const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\n\r\n";
+pub const SERVER_ERROR: &str =
+    "HTTP/1.1 500 INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum HttpMethod {
     POST,
     GET,
+    DELETE,
 }
 
 impl HttpMethod {
@@ -21,7 +22,8 @@ impl HttpMethod {
         match method {
             "POST" => HttpMethod::POST,
             "GET" => HttpMethod::GET,
-            _ => HttpMethod::GET,
+            "DELETE" => HttpMethod::DELETE,
+            unknown => panic!("Unknown HTTP method: {}", unknown),
         }
     }
 }
@@ -89,13 +91,12 @@ mod test {
     #[test]
     fn parse_query_params_test() {
         let (path, params) = parse_query_params("/hello?hello=world&test=1".to_string());
-        
+
         assert_eq!("/hello", path);
         assert_eq!(2, params.len());
         assert_eq!("world", params["hello"]);
         assert_eq!("1", params["test"]);
     }
-
 
     #[test]
     fn parse_query_params_test_4() {
@@ -103,7 +104,7 @@ mod test {
 
         assert_eq!("/hello", path);
     }
-    
+
     #[test]
     fn parse_query_params_test_3() {
         let (path, params) = parse_query_params("/hello?".to_string());

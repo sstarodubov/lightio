@@ -34,7 +34,10 @@ impl FileStorage {
         Ok(Self { data_path: PathBuf::from(path) })
     }
 
-
+    pub fn create_file(&self, new_file_path: &Path) -> Result<File, io::Error> {
+        let real_path = self.data_path.join(new_file_path);
+        File::create(real_path)
+    }
     pub fn create_bucket(&self, name: &Path) -> io::Result<()> {
         Self::create_dir(&self.data_path.join(name).deref())
     }
@@ -47,10 +50,11 @@ impl FileStorage {
         fs::remove_dir_all(self.data_path.join(name).deref())
     }
 
-    pub fn find_object(&self, path: &Path) -> io::Result<File> {
+    pub fn open_file(&self, path: &Path) -> io::Result<File> {
        let path = self.data_path.join(path); 
        File::open(path)
     }
+   
     fn create_dir(path: &Path) -> io::Result<()> {
         if !&path.exists() {
             println!("creating data folder {:?}", path);

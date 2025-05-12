@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::net::TcpStream;
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 pub trait HttpHandler {
@@ -178,9 +178,13 @@ impl HttpHandler for ReadObjectHandler {
             let object_name = object_name.unwrap();
             let obj_result = self
                 .file_storage
-                .find_object(Path::new(bucket_name).join(object_name).deref());
+                .open_file(Path::new(bucket_name).join(object_name).deref());
             if obj_result.is_err() {
-                println!("object_name does not exist: {}, {}", bucket_name, &obj_result.unwrap_err());
+                println!(
+                    "object_name does not exist: {}, {}",
+                    bucket_name,
+                    &obj_result.unwrap_err()
+                );
                 output
                     .write_all(http::NOT_FOUND.as_bytes())
                     .expect("file is not found write panic");
@@ -193,13 +197,13 @@ impl HttpHandler for ReadObjectHandler {
             output.write_all("Content-type: application/octet-stream\r\n".as_bytes());
             let content_len = format!("Content-length: {}\r\n\r\n", len);
             output.write_all(content_len.as_bytes());
-            let mut buff = [0; 1024*1024];
+            let mut buff = [0; 1024 * 1024];
             loop {
                 let read_bytes = obj.read(&mut buff).expect("read file panic");
                 if read_bytes == 0 {
                     break;
-                } else { 
-                   output.write_all(&buff[0..read_bytes]).unwrap(); 
+                } else {
+                    output.write_all(&buff[0..read_bytes]).unwrap();
                 }
             }
         }
@@ -210,5 +214,86 @@ impl HttpHandler for ReadObjectHandler {
     }
     fn method(&self) -> HttpMethod {
         HttpMethod::GET
+    }
+}
+
+// create object
+pub struct CreateObjectHandler {
+    file_storage: &'static FileStorage,
+}
+impl CreateObjectHandler {
+    pub fn new(file_storage: &'static FileStorage) -> Self {
+        CreateObjectHandler { file_storage }
+    }
+}
+
+impl HttpHandler for CreateObjectHandler {
+    fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>) {
+        let mut output = output.borrow_mut();
+        let query_params = &req.query_params;
+        let bucket_name = query_params.get("bucket_name");
+        let object_name = query_params.get("object_name");
+        if bucket_name.is_none() || object_name.is_none() {
+            println!("object_name and bucket_name are required");
+            output.write_all(http::BAD_REQUEST.as_bytes()).expect("object name does not exist panic");
+            return;
+        }
+        let bucket_name = bucket_name.unwrap();
+        let object_name = object_name.unwrap();
+
+        let size = req.headers.get("content-length");
+        if size.is_none() {
+            println!("content-length header missing");
+            output.write_all(http::BAD_REQUEST.as_bytes()).expect("content length header missing panic");
+            return;
+        }
+
+        let size = size.unwrap().trim().parse::<usize>();
+        if size.is_err() {
+            println!("content length value is not correct");
+            output.write_all(http::BAD_REQUEST.as_bytes()).expect("content length value invalid");
+            return;
+        }
+        let content_size = size.unwrap();
+        let create_object_path = Path::new(bucket_name).join(object_name);
+        let new_file = self.file_storage.create_file(create_object_path.as_path());
+        match new_file {
+            Ok(mut file) => {
+                let mut buff = [0; 1024*1024];
+                let mut cur_size: usize = 0;
+                let mut body = &mut req.body;
+                loop {
+                    match body.read(&mut buff) {
+                        Ok(0) => break,
+                        Ok(written_size) => {
+                            println!("{}", String::from_utf8_lossy(&buff[0..written_size]));
+                            file.write_all(&buff[0..written_size]).unwrap_or_else(|e| {
+                                println!("cannot write file: {}", e);
+                            });
+                            cur_size += written_size;
+                            if cur_size >= content_size {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            println!("cannot read response: {}", e);
+                        }
+                    }
+                }
+
+                output.write_all(http::OK_RESPONSE.as_bytes()).expect("write response panic");
+            }
+            Err(e) => {
+                println!("cannot create object file: {}", e);
+                output.write_all(http::SERVER_ERROR.as_bytes()).expect("write response panic");
+            }
+        }
+    }
+
+    fn path(&self) -> &str {
+        OBJECT_PATH
+    }
+    fn method(&self) -> HttpMethod {
+        HttpMethod::POST
     }
 }

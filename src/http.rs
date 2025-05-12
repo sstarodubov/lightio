@@ -60,7 +60,7 @@ pub fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Option<HashMap<Strin
         }
         match line.split_once(":") {
             Some((header, value)) => {
-                headers.insert(header.to_string(), value.to_string());
+                headers.insert(header.to_string().to_lowercase(), value.to_string());
             }
             None if line.trim().is_empty() => {
                 //do nothing

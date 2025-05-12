@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::{fs, io};
+use std::fs::File;
 use std::ops::Deref;
 
 pub struct FileStorageConfig {
@@ -46,6 +47,10 @@ impl FileStorage {
         fs::remove_dir_all(self.data_path.join(name).deref())
     }
 
+    pub fn find_object(&self, path: &Path) -> io::Result<File> {
+       let path = self.data_path.join(path); 
+       File::open(path)
+    }
     fn create_dir(path: &Path) -> io::Result<()> {
         if !&path.exists() {
             println!("creating data folder {:?}", path);

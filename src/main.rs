@@ -5,7 +5,9 @@ mod server;
 mod thread_pool;
 
 use crate::file_storage::FileStorageConfig;
-use crate::http_handler::{BucketCreateHandler, BucketDeleteHandler, BucketExistsHandler};
+use crate::http_handler::{
+    BucketCreateHandler, BucketDeleteHandler, BucketExistsHandler, ReadObjectHandler,
+};
 use crate::server::HttpServerConfig;
 use file_storage::FileStorage;
 use server::HttpServer;
@@ -18,5 +20,6 @@ fn main() {
         Box::new(BucketCreateHandler::new(file_storage)),
         Box::new(BucketDeleteHandler::new(file_storage)),
         Box::new(BucketExistsHandler::new(file_storage)),
+        Box::new(ReadObjectHandler::new(file_storage)),
     ]))
 }

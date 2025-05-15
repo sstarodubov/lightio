@@ -28,6 +28,14 @@ impl HttpMethod {
             unknown => panic!("Unknown HTTP method: {}", unknown),
         }
     }
+    
+    pub fn as_str(&self) -> &str {
+        match self { 
+            HttpMethod::POST => "POST",
+            HttpMethod::GET => "GET",
+            HttpMethod::DELETE => "DELETE",
+        }
+    }
 }
 
 #[derive(Debug)]

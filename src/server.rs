@@ -73,6 +73,7 @@ impl HttpServer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn start_on_thread(config: HttpServerConfig) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             Self::start(config);

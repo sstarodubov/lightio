@@ -5,13 +5,17 @@ use std::io::{Error, Read, Write};
 
 use std::net::TcpStream;
 
+#[allow(dead_code)]
 pub struct HttpClient;
 
 impl HttpClient {
+
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {}
     }
 
+    #[allow(dead_code)]
     pub fn get(&self, url: &str) -> RequestBuilder {
         RequestBuilder {
             url: url.to_string(),
@@ -21,6 +25,8 @@ impl HttpClient {
         }
     }
 
+   
+    #[allow(dead_code)]
     pub fn post(&self, url: &str) -> RequestBuilder {
         RequestBuilder {
             url: url.to_string(),
@@ -31,32 +37,44 @@ impl HttpClient {
     }
 }
 
+#[allow(dead_code)]
 pub struct Response {
     status_code: u16,
 }
 impl Response {
+    #[allow(dead_code)]
     pub fn new(status_code: u16) -> Self {
         Self { status_code }
     }
 
+    #[allow(dead_code)]
     pub fn status(&self) -> u16 {
         self.status_code
     }
 }
 
 pub struct RequestBuilder {
+
+    #[allow(dead_code)]
     url: String,
     method: HttpMethod,
+
+    #[allow(dead_code)]
     headers: HashMap<String, String>,
+
+    #[allow(dead_code)]
     body: Vec<u8>,
 }
 
 impl RequestBuilder {
+
+    #[allow(dead_code)]
     pub fn header(mut self, key: &str, value: &str) -> Self {
         self.headers.insert(key.to_string(), value.to_string());
         self
     }
 
+    #[allow(dead_code)]
     pub fn body(mut self, data: &str) -> Self {
         self.body = data.as_bytes().to_vec();
         self
@@ -68,6 +86,7 @@ impl RequestBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn send(&self) -> Result<Response, Error> {
         let url = Self::parse_url(&self.url);
         if url.is_none() {

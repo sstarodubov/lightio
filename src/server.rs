@@ -4,10 +4,9 @@ use crate::thread_pool;
 use crate::http::{HttpMethod, HttpReq};
 use crate::http_handler::HttpHandler;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader,Write};
 use std::net::Shutdown::Both;
 use std::net::{TcpListener, TcpStream};
-use std::ops::DerefMut;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
@@ -20,8 +19,8 @@ pub struct HttpServer;
 pub struct HttpServerConfig {
     port: u16,
     handlers: Vec<BoxHttpHandler>,
-    max_req: i64,
     pool_size: usize,
+    close: bool,
 }
 
 impl HttpServerConfig {
@@ -29,16 +28,18 @@ impl HttpServerConfig {
         Self {
             port: 8080,
             handlers: Vec::new(),
-            max_req: -1,
             pool_size: 4,
+            close: false,
         }
     }
-    
+
+    #[allow(dead_code)]
     pub fn pool_size(mut self, size: usize) -> Self {
         self.pool_size = size;
         self
     }
-    
+
+    #[allow(dead_code)]
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self
@@ -48,9 +49,8 @@ impl HttpServerConfig {
         self.handlers = handlers;
         self
     }
-
-    pub fn max_req(mut self, max_req: i64) -> Self {
-        self.max_req = max_req;
+    pub fn close(mut self) -> Self {
+        self.close = true;
         self
     }
 }
@@ -60,13 +60,12 @@ impl HttpServer {
         let HttpServerConfig {
             handlers,
             port,
-            max_req,
-            pool_size
+            pool_size,
+            close,
         } = config;
 
         let pool = thread_pool::ThreadPool::new(pool_size).expect("thread pool create error"); 
         let handlers = Arc::new(Self::create_handler_map(handlers));
-        let mut handled_requests = 0;
         let listener =
             TcpListener::bind(format!("127.0.0.1:{}", port)).expect("Failed to bind port");
         println!("Listening on {}", port);
@@ -74,14 +73,9 @@ impl HttpServer {
             match stream {
                 Ok(stream) => {
                     let handler_map = Arc::clone(&handlers);
-                    pool.execute(move || Self::dispatch(stream, handler_map));
+                    pool.execute(move || Self::dispatch(stream, handler_map, close));
                 }
                 Err(e) => eprintln!("Http request e: {}", e),
-            }
-            handled_requests += 1;
-            if max_req != -1 && handled_requests >= max_req {
-                println!("stop server");
-                return;
             }
         }
     }
@@ -106,7 +100,7 @@ impl HttpServer {
         map
     }
 
-    fn dispatch(mut stream: TcpStream, handlers: Arc<BoxHttpHandlerMap>) {
+    fn dispatch(mut stream: TcpStream, handlers: Arc<BoxHttpHandlerMap>, close_on_req: bool) {
         loop {
             let rc_stream = Rc::new(RefCell::new(&stream));
             let rc_stream = Rc::clone(&rc_stream);
@@ -154,7 +148,7 @@ impl HttpServer {
             if method_hm.is_none() {
                 println!("method not found warning. method: {:?}", request.method);
                 Self::write(&mut stream, http::NOT_FOUND.as_bytes());
-                continue;
+                break;
             }
             let method_hm = method_hm.expect("method extracting panic");
             let path = &request.path;
@@ -165,11 +159,11 @@ impl HttpServer {
                     request.path, request.method
                 );
                 Self::write(&mut stream, http::NOT_FOUND.as_bytes());
-                continue;
+                break;
             }
             
             let handler = http_handler.expect("handler is not found");
-            handler.handle_request(&mut request, rc_stream);
+            let rc_stream = handler.handle_request(&mut request, rc_stream);
         }
     }
 
@@ -194,12 +188,9 @@ impl HttpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reqwest::Method;
-    use reqwest::blocking::Client;
-    use reqwest::blocking::Response;
-    use std::cmp::PartialEq;
     use std::time::Duration;
-
+    use crate::http_client::*;
+    
     struct TestHandler;
     unsafe impl Sync for TestHandler {}
     unsafe impl Send for TestHandler {}
@@ -232,6 +223,7 @@ mod tests {
             } else {
                 output.borrow_mut().write_all(http::TEMPLATE_OK.replace("{}", "200").as_bytes()).unwrap();
             }
+            output.borrow_mut().shutdown(Both).unwrap(); 
         }
 
         fn path(&self) -> &str {
@@ -247,18 +239,17 @@ mod tests {
         HttpServer::start_on_thread(
             HttpServerConfig::new()
                 .port(port)
-                .max_req(1)
                 .handlers(vec![Box::new(handler)]),
         );
         thread::sleep(Duration::from_millis(200));
     }
 
-    fn send_req(port: u16, method: Method, path: &str) -> Response {
-        let client = Client::new();
+    fn send_req(port: u16, method: HttpMethod, path: &str) -> Response {
+        let client = HttpClient::new();
         let url = format!("http://localhost:{}/{}", port, path);
         let request = match method {
-            Method::GET => client.get(&url),
-            Method::POST => client.post(&url),
+            HttpMethod::GET => client.get(&url),
+            HttpMethod::POST => client.post(&url),
             _ => panic!("unknown method"),
         };
         request.send().unwrap()
@@ -267,45 +258,45 @@ mod tests {
     #[test]
     fn send_fine_request() {
         start_server(8080, TestHandler);
-        assert_eq!(200, send_req(8080, Method::GET, "hello").status().as_u16());
+        assert_eq!(200, send_req(8080, HttpMethod::GET, "hello").status());
     }
 
     #[test]
     fn send_unknown_method() {
         start_server(8081, TestHandler);
-        assert_eq!(404, send_req(8081, Method::POST, "hello").status().as_u16());
+        assert_eq!(404, send_req(8081, HttpMethod::POST, "hello").status());
     }
 
     #[test]
     fn send_unknown_path() {
         start_server(8082, TestHandler);
-        assert_eq!(404, send_req(8082, Method::GET, "hoho").status().as_u16());
+        assert_eq!(404, send_req(8082, HttpMethod::GET, "hoho").status());
     }
 
     #[test]
     fn send_body() {
         start_server(8083, TestHandler);
 
-        let client = Client::new();
+        let client = HttpClient::new();
         let req = client
             .get("http://localhost:8083/hello")
             .header("content-length", "?")
             .body("helloworld\r\n");
         let response = req.send().unwrap();
 
-        assert_eq!(201, response.status().as_u16());
+        assert_eq!(201, response.status());
     }
 
     #[test]
     fn send_query_params() {
         start_server(8084, TestHandler);
 
-        let client = Client::new();
+        let client = HttpClient::new();
         let req = client
             .get("http://localhost:8084/hello?hello=world&test=1")
             .header("X-QUERY", "?");
         let response = req.send().unwrap();
 
-        assert_eq!(205, response.status().as_u16());
+        assert_eq!(205, response.status());
     }
 }

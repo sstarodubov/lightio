@@ -2,9 +2,13 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 
+#[allow(dead_code)]
 pub const TEMPLATE_CLIENT_ERROR: &str = "HTTP/1.1 {} BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
+
+#[allow(dead_code)]
 pub const TEMPLATE_OK: &str = "HTTP/1.1 {} OK\r\nContent-Length: 0\r\n\r\n";
 
+#[allow(dead_code)]
 pub const TEMPLATE_SERVER_ERROR: &str = "HTTP/1.1 {} INTERNAL ERROR\r\nContent-Length: 0\r\n\r\n";
 pub const BAD_REQUEST: &str = "HTTP/1.1 400 BAD REQUEST\r\nContent-Length: 0\r\n\r\n";
 pub const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\nContent-Length: 0\r\n\r\n";
@@ -110,7 +114,7 @@ mod test {
 
     #[test]
     fn parse_query_params_test_4() {
-        let (path, params) = parse_query_params("/hello?hello=world?&test=1".to_string());
+        let (path, _params) = parse_query_params("/hello?hello=world?&test=1".to_string());
 
         assert_eq!("/hello", path);
     }

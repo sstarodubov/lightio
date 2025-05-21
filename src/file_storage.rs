@@ -14,6 +14,7 @@ impl FileStorageConfig {
         }
     }
 
+    #[allow(dead_code)]
     pub fn data_path(mut self, data_path: String) -> Self {
         self.data_path = PathBuf::from(data_path);
         self

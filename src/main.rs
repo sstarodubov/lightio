@@ -10,10 +10,8 @@ use crate::http_handler::*;
 use crate::server::HttpServerConfig;
 use file_storage::FileStorage;
 use server::HttpServer;
-use crate::http_client::HttpClient;
 
 fn main() {
-    /*
     let file_storage_config = FileStorageConfig::new();
     let file_storage = Box::new(FileStorage::new(file_storage_config).unwrap());
     let file_storage: &'static FileStorage = Box::leak(file_storage);
@@ -24,7 +22,4 @@ fn main() {
         Box::new(ReadObjectHandler::new(file_storage)),
         Box::new(CreateObjectHandler::new(file_storage)),
     ]))
-     */
-    let req = HttpClient::new().get("http://localhost:8080/hello");
-    req.send();
 }

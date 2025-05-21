@@ -3,10 +3,10 @@ use crate::http;
 use crate::http::{HttpMethod, HttpReq};
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::ops::{Deref, DerefMut};
-use std::path::{Path, PathBuf};
+use std::ops::{Deref};
+use std::path::{Path};
 use std::rc::Rc;
 
 pub trait HttpHandler {
@@ -28,7 +28,7 @@ impl BucketCreateHandler {
     }
 }
 impl HttpHandler for BucketCreateHandler {
-    fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>) {
+    fn handle_request(&self, req: &mut HttpReq, output: Rc<RefCell<&TcpStream>>)  {
         let query_params = &req.query_params;
         match query_params.get("bucket_name") {
             Some(bucket_name) => {
@@ -193,10 +193,14 @@ impl HttpHandler for ReadObjectHandler {
 
             let mut obj = obj_result.unwrap();
             let len = Self::file_size(&obj);
-            output.write_all("HTTP/1.1 200 OK\r\n".as_bytes());
-            output.write_all("Content-type: application/octet-stream\r\n".as_bytes());
+            output.write_all("HTTP/1.1 200 OK\r\n".as_bytes()).unwrap_or_else(|e| {
+                println!("cannot write response status: {}", e);
+            });
+            output.write_all("Content-type: application/octet-stream\r\n".as_bytes()).unwrap_or_else(|e| {
+                println!("cannot write content-type: {}", e);
+            });
             let content_len = format!("Content-length: {}\r\n\r\n", len);
-            output.write_all(content_len.as_bytes());
+            output.write_all(content_len.as_bytes()).unwrap();
             let mut buff = [0; 1024 * 1024];
             loop {
                 let read_bytes = obj.read(&mut buff).expect("read file panic");
@@ -261,7 +265,7 @@ impl HttpHandler for CreateObjectHandler {
             Ok(mut file) => {
                 let mut buff = [0; 1024*1024];
                 let mut cur_size: usize = 0;
-                let mut body = &mut req.body;
+                let body = &mut req.body;
                 loop {
                     match body.read(&mut buff) {
                         Ok(0) => break,

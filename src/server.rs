@@ -20,7 +20,6 @@ pub struct HttpServerConfig {
     port: u16,
     handlers: Vec<BoxHttpHandler>,
     pool_size: usize,
-    close: bool,
 }
 
 impl HttpServerConfig {
@@ -29,7 +28,6 @@ impl HttpServerConfig {
             port: 8080,
             handlers: Vec::new(),
             pool_size: 4,
-            close: false,
         }
     }
 
@@ -49,10 +47,6 @@ impl HttpServerConfig {
         self.handlers = handlers;
         self
     }
-    pub fn close(mut self) -> Self {
-        self.close = true;
-        self
-    }
 }
 
 impl HttpServer {
@@ -61,7 +55,6 @@ impl HttpServer {
             handlers,
             port,
             pool_size,
-            close,
         } = config;
 
         let pool = thread_pool::ThreadPool::new(pool_size).expect("thread pool create error"); 
@@ -73,7 +66,7 @@ impl HttpServer {
             match stream {
                 Ok(stream) => {
                     let handler_map = Arc::clone(&handlers);
-                    pool.execute(move || Self::dispatch(stream, handler_map, close));
+                    pool.execute(move || Self::dispatch(stream, handler_map));
                 }
                 Err(e) => eprintln!("Http request e: {}", e),
             }
@@ -100,7 +93,7 @@ impl HttpServer {
         map
     }
 
-    fn dispatch(mut stream: TcpStream, handlers: Arc<BoxHttpHandlerMap>, close_on_req: bool) {
+    fn dispatch(mut stream: TcpStream, handlers: Arc<BoxHttpHandlerMap>) {
         loop {
             let rc_stream = Rc::new(RefCell::new(&stream));
             let rc_stream = Rc::clone(&rc_stream);
@@ -163,7 +156,7 @@ impl HttpServer {
             }
             
             let handler = http_handler.expect("handler is not found");
-            let rc_stream = handler.handle_request(&mut request, rc_stream);
+            handler.handle_request(&mut request, rc_stream)
         }
     }
 
